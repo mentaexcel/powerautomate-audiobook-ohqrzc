@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAKUYA式 Power Automate入門｜音声で聴ける電子書籍</title>
+<style>
+  :root {
+    --paper: #fdfcf8;
+    --ink: #2b2b33;
+    --ink-soft: #5a5a66;
+    --accent1: #0f6cbd;   /* Copilot blue */
+    --accent2: #8b5cf6;   /* violet */
+    --accent3: #d946a8;   /* pink */
+    --hl: linear-gradient(transparent 18%, rgba(255, 227, 84, .85) 18%, rgba(255, 210, 60, .9) 88%, transparent 88%);
+    --serif: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", serif;
+    --sans: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  html, body { overflow-x: clip; overscroll-behavior-x: none; }
+  body {
+    font-family: var(--sans);
+    background: radial-gradient(1200px 800px at 70% -10%, #2c3e6b 0%, #1b2340 45%, #12172b 100%);
+    color: var(--ink);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+
+  /* ===== 書籍本体 ===== */
+  #book {
+    position: relative;
+    width: min(1060px, 96vw);
+    height: min(680px, calc(100vh - 92px));
+    perspective: 2200px;
+  }
+  .page {
+    position: absolute; inset: 0;
+    background: var(--paper);
+    border-radius: 10px 18px 18px 10px;
+    box-shadow: 0 30px 60px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.35);
+    display: flex; flex-direction: column;
+    opacity: 0; visibility: hidden;
+    transform: translateX(60px) rotateY(-14deg);
+    transform-origin: left center;
+    transition: transform .65s cubic-bezier(.22,.75,.25,1), opacity .55s ease;
+    overflow: hidden;
+  }
+  .page.current { opacity: 1; visibility: visible; transform: none; z-index: 2; }
+  .page.leaving { opacity: 0; visibility: visible; transform: translateX(-70px) rotateY(12deg); z-index: 1; }
+  /* 本の背・ノド */
+  .page::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 26px;
+    background: linear-gradient(90deg, rgba(0,0,0,.14), rgba(0,0,0,.045) 55%, transparent);
+    pointer-events: none; z-index: 5;
+  }
+  /* 柱・フッター */
+  .running {
+    flex: 0 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 30px 10px 44px;
+    font-size: 11px; letter-spacing: .16em; color: #9a93a8;
+  }
+  .running .brand b { color: var(--accent1); font-weight: 700; }
+  .pagefoot {
+    flex: 0 0 auto;
+    display: flex; justify-content: center; align-items: center; gap: 10px;
+    padding: 10px 0 14px;
+    font-size: 11px; color: #a8a2b4; letter-spacing: .2em;
+  }
+  .pagefoot::before, .pagefoot::after {
+    content: ""; width: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, #cfc8dc);
+  }
+  .pagefoot::after { background: linear-gradient(90deg, #cfc8dc, transparent); }
+
+  /* 章バンド */
+  .chapband {
+    flex: 0 0 auto;
+    margin: 2px 30px 0 44px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .chapband .no {
+    font-family: var(--serif); font-size: 30px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent1), var(--accent2) 60%, var(--accent3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    line-height: 1;
+  }
+  .chapband h2 { font-size: 21px; letter-spacing: .04em; }
+  .chapband .rule { flex: 1; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent1), var(--accent2) 55%, transparent); opacity: .35; }
+
+  /* 本文レイアウト */
+  .body2col {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; gap: 26px;
+    padding: 16px 34px 6px 44px;
+  }
+  .fig { flex: 0 0 46%; min-width: 0; display: flex; align-items: center; justify-content: center; }
+  .txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .txt p {
+    font-size: 15.5px; line-height: 2.05; letter-spacing: .02em;
+    color: var(--ink); margin-bottom: .9em; text-align: justify;
+  }
+  .txt.wide p { font-size: 16px; }
+  /* 蛍光ペンハイライト */
+  span[data-sid] { border-radius: 3px; transition: background-color .25s; padding: 1px 0; }
+  span[data-sid].active { background-image: var(--hl); }
+  span[data-sid].done { color: var(--ink); }
+
+
+  .figimg {
+    max-width: 100%; max-height: 100%; width: auto; height: auto;
+    border-radius: 14px;
+    box-shadow: 0 10px 26px rgba(43,32,89,.16);
+    border: 1px solid #eee9f5;
+  }
+  /* 図版カード */
+  .shotcard {
+    width: 100%; border-radius: 12px; overflow: hidden;
+    border: 1px solid #e4dfee;
+    box-shadow: 0 10px 26px rgba(43,32,89,.14);
+    background: #fff;
+  }
+  .shotcard .bar {
+    height: 26px; background: linear-gradient(180deg,#f4f1fa,#e9e4f4);
+    display: flex; align-items: center; gap: 5px; padding: 0 10px;
+  }
+  .shotcard .bar i { width: 8px; height: 8px; border-radius: 50%; background: #d3cbe4; }
+  .shotcard img { display: block; width: 100%; height: auto; }
+  .figcap { margin-top: 8px; font-size: 11px; color: #8f88a0; text-align: center; letter-spacing: .06em; }
+
+  /* SVG図解共通 */
+  .diagram { width: 100%; height: auto; }
+
+  /* ===== スクショページ用 縦積みレイアウト ===== */
+  .body2col.vstack { flex-direction: column; gap: 8px; padding-top: 8px; }
+  .vstack .fig { flex: 1 1 auto; min-height: 0; width: 100%; }
+  .vstack .fig > div { height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; min-height: 0; }
+  .vstack .shotcard { max-width: 100%; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .vstack .shotcard img { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 52vh; object-fit: contain; }
+  .vstack .figcap { flex: 0 0 auto; }
+  .vstack .txt { flex: 0 0 auto; width: 100%; }
+  .vstack .txt p { line-height: 1.85; margin-bottom: .5em; }
+
+  /* ===== クリックで拡大（ライトボックス） ===== */
+  .shotcard img, .figimg { cursor: zoom-in; }
+  #lightbox {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(8, 10, 24, .93);
+    display: none; align-items: center; justify-content: center;
+    cursor: zoom-out;
+  }
+  #lightbox.show { display: flex; }
+  #lightbox img {
+    max-width: 96vw; max-height: 96vh;
+    border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    background: #fff;
+  }
+
+  /* ===== 表紙 ===== */
+  .cover { align-items: center; justify-content: center; text-align: center;
+    background:
+      radial-gradient(700px 460px at 82% 8%, rgba(139,92,246,.16), transparent 60%),
+      radial-gradient(600px 420px at 12% 92%, rgba(15,108,189,.14), transparent 60%),
+      var(--paper); }
+  .cover .coverInner { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 30px; }
+  .cover .lbl {
+    font-size: 12px; letter-spacing: .5em; color: var(--accent1); font-weight: 700;
+  }
+  .cover h1 {
+    font-family: var(--serif); font-size: clamp(34px, 5vw, 54px); line-height: 1.35;
+    letter-spacing: .06em; color: #211d33;
+  }
+  .cover h1 .grad {
+    background: linear-gradient(120deg, var(--accent1) 10%, var(--accent2) 55%, var(--accent3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .cover .sub { font-size: 14px; color: var(--ink-soft); letter-spacing: .14em; }
+  .voicebadge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 700; color: #fff; letter-spacing: .1em;
+    padding: 8px 18px; border-radius: 999px;
+    background: linear-gradient(120deg, var(--accent1), var(--accent2) 70%, var(--accent3));
+    box-shadow: 0 6px 18px rgba(99,72,214,.35);
+  }
+  #startBtn {
+    margin-top: 10px; cursor: pointer; border: none;
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--sans); font-size: 16px; font-weight: 700; letter-spacing: .12em;
+    color: #241f38; padding: 15px 36px; border-radius: 999px;
+    background: #fff; border: 2px solid #d9d2ea;
+    box-shadow: 0 10px 26px rgba(30,20,70,.18);
+    transition: transform .18s, box-shadow .18s;
+  }
+  #startBtn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(30,20,70,.26); }
+  #startBtn .tri {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: linear-gradient(120deg, var(--accent1), var(--accent2));
+    display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 13px;
+  }
+  .cover .author { font-size: 13px; color: var(--ink-soft); letter-spacing: .2em; margin-top: 4px; }
+
+  /* ===== コントロールバー ===== */
+  #ctrl {
+    margin-top: 16px;
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(10px);
+    padding: 9px 18px; border-radius: 999px;
+    color: #e8e5f2; font-size: 12.5px; user-select: none;
+  }
+  #ctrl button {
+    cursor: pointer; border: none; background: rgba(255,255,255,.12); color: #fff;
+    width: 36px; height: 36px; border-radius: 50%; font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  #ctrl button:hover { background: rgba(255,255,255,.24); }
+  #ctrl button.primary {
+    width: 46px; height: 46px; font-size: 17px;
+    background: linear-gradient(120deg, var(--accent1), var(--accent2));
+  }
+  #pageInd { min-width: 64px; text-align: center; letter-spacing: .12em; }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .toggle .sw {
+    width: 34px; height: 19px; border-radius: 999px; background: rgba(255,255,255,.2); position: relative; transition: background .2s;
+  }
+  .toggle .sw::after {
+    content: ""; position: absolute; top: 2.5px; left: 3px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff; transition: left .2s;
+  }
+  .toggle.on .sw { background: linear-gradient(120deg, var(--accent1), var(--accent2)); }
+  .toggle.on .sw::after { left: 17px; }
+  #speedSel {
+    cursor: pointer; border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.12); color: #fff;
+    font-family: var(--sans); font-size: 12.5px; font-weight: 700;
+    padding: 6px 10px; border-radius: 999px; outline: none;
+  }
+  #speedSel option { color: #2b2b33; background: #fff; }
+
+  /* ===== レスポンシブ ===== */
+  @media (max-width: 860px) {
+    body { overflow-y: auto; overflow-x: hidden; }
+    #book { height: min(640px, calc(100vh - 128px)); }
+    /* 画像は固定・文字エリアだけがスクロールするフレームになる */
+    .body2col, .body2col.vstack { flex-direction: column; gap: 12px; padding: 10px 22px 4px 30px; overflow: hidden; }
+    .fig, .vstack .fig { flex: 0 0 auto; }
+    .figimg { max-height: 42vh; }
+    .vstack .shotcard img { max-height: 34vh; }
+    .txt, .vstack .txt { flex: 1 1 auto; min-height: 0; overflow-y: auto; justify-content: flex-start; }
+    .txt p { font-size: 13.5px; line-height: 1.9; }
+    .chapband { margin-left: 22px; margin-right: 16px; }
+    .chapband h2 { font-size: 17px; }
+    .chapband .no { font-size: 24px; }
+    /* 柱：折り返し禁止・省略表示 */
+    .running { padding: 10px 16px 6px 22px; gap: 8px; }
+    .running .brand {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0; flex: 1 1 auto;
+    }
+    .running span:last-child { white-space: nowrap; flex: 0 0 auto; }
+    /* コントロールバー：画面内に収める */
+    #ctrl {
+      flex-wrap: wrap; justify-content: center;
+      gap: 8px 12px; padding: 8px 14px;
+      max-width: 96vw; border-radius: 22px;
+      font-size: 12px;
+    }
+    #ctrl button { width: 32px; height: 32px; font-size: 12px; }
+    #ctrl button.primary { width: 40px; height: 40px; font-size: 15px; }
+    #pageInd { min-width: 46px; }
+    .toggle { white-space: nowrap; }
+    #speedSel { padding: 5px 8px; font-size: 12px; }
+  }
+
+  /* ===== 横向きスマホなど「高さの低い画面」 ===== */
+  @media (max-height: 540px) {
+    body { overflow-y: auto; overflow-x: hidden; }
+    #book { height: calc(100vh - 104px); min-height: 300px; }
+    .body2col, .body2col.vstack { flex-direction: column; overflow: hidden; }
+    .fig, .vstack .fig { flex: 0 0 auto; }
+    .txt, .vstack .txt { flex: 1 1 auto; min-height: 0; overflow-y: auto; justify-content: flex-start; }
+    .running { padding: 8px 24px 4px 30px; font-size: 10px; }
+    .running .brand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .chapband { margin-top: 0; }
+    .chapband .no { font-size: 20px; }
+    .chapband h2 { font-size: 16px; }
+    .body2col { padding: 8px 26px 4px 34px; gap: 16px; overflow-y: auto; }
+    .txt p { font-size: 12.5px; line-height: 1.75; margin-bottom: .5em; }
+    .figimg { max-height: 36vh; }
+    .vstack .shotcard img { max-height: 26vh; }
+    .figcap { font-size: 10px; margin-top: 4px; }
+    .pagefoot { padding: 4px 0 8px; }
+    .cover .coverInner { gap: 10px; padding: 16px; }
+    .cover h1 { font-size: clamp(22px, 4.5vw, 38px); }
+    #startBtn { padding: 10px 24px; font-size: 14px; }
+    #ctrl { margin-top: 8px; padding: 6px 12px; gap: 6px 10px; font-size: 11.5px; }
+    #ctrl button { width: 30px; height: 30px; font-size: 12px; }
+    #ctrl button.primary { width: 36px; height: 36px; font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="book"></div>
+
+<div id="ctrl" style="visibility:hidden">
+  <button id="prevBtn" title="前のページ">◀</button>
+  <button id="playBtn" class="primary" title="再生 / 一時停止">▶</button>
+  <button id="nextBtn" title="次のページ">▶▶</button>
+  <span id="pageInd">1 / 14</span>
+  <span class="toggle on" id="autoTgl" title="読み終わったら自動でページをめくる">
+    <span class="sw"></span>自動めくり
+  </span>
+  <select id="speedSel" title="読み上げ速度">
+    <option value="0.75">0.75x</option>
+    <option value="1" selected>1x</option>
+    <option value="1.5">1.5x</option>
+    <option value="1.8">1.8x</option>
+    <option value="2">2x</option>
+    <option value="2.5">2.5x</option>
+    <option value="3">3x</option>
+  </select>
+</div>
+
+<!-- ===== ページテンプレート（JSが #book に展開） ===== -->
+<template id="tpl-pages">
+
+  <!-- P1 表紙 -->
+  <section class="page cover" data-page="P1">
+    <div class="coverInner">
+      <div class="lbl">MENTA EXCEL PRESENTS</div>
+      <h1>TAKUYA式<br><span class="grad">Power Automate</span> 入門</h1>
+      <div class="sub">作業する側から、任せる側へ ― 全48ページ</div>
+      <div class="voicebadge">🎧 本人の声で読み上げ＆自動ページめくり</div>
+      <button id="startBtn"><span class="tri">▶</span>タップして読み聞かせスタート</button>
+      <div class="author">著・朗読　TAKUYA（メンタエクセル）</div>
+      <p style="display:none"><span data-sid="p1s0">TAKUYA式、Power Automate入門、完全版。</span><span data-sid="p1s1">作業する側から、任せる側へ。</span><span data-sid="p1s2">音声で聴ける電子書籍です。</span></p>
+    </div>
+  </section>
+
+  <!-- P2 はじめに -->
+  <section class="page" data-page="P2">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PROLOGUE</span></div>
+    <div class="chapband"><span class="no">00</span><h2>はじめに</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p2.jpg" alt="はじめに 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p2s0">はい、皆さんこんにちは。</span><span data-sid="p2s1">TAKUYAです。</span><span data-sid="p2s2">今回はですね、Power Automate入門というテーマで、音声付きの電子書籍を作ってみました。</span></p>
+        <p><span data-sid="p2s3">この本、僕の声で読み上げが自動で進んで、今読んでいるところに蛍光ペンでマーカーが引かれて、ページも勝手にめくれていくんですよ。</span><span data-sid="p2s4">読み上げの速度は下のバーで変えられますし、図解や画面はクリックすると大きく表示できます。</span><span data-sid="p2s5">なので皆さんは、聴きながら眺めているだけでOKです。</span></p>
+        <p><span data-sid="p2s6">それではですね、一緒に学んでいきましょう。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">2</div>
+  </section>
+
+  <!-- P3 皆さん、こういうことありませんか -->
+  <section class="page" data-page="P3">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PROLOGUE</span></div>
+    <div class="chapband"><span class="no">01</span><h2>皆さん、こういうことありませんか</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p3.jpg" alt="皆さん、こういうことありませんか 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p3s0">で、本題に入る前にですね、皆さん、こういうことありませんか。</span><span data-sid="p3s1">毎朝出社して最初にやるのが、Excelのコピペと報告メールだったり。</span><span data-sid="p3s2">メールに添付が届くたびに、手でフォルダに保存したり。</span></p>
+        <p><span data-sid="p3s3">上司に承認をお願いしたのに、何日も見てもらえなかったり。</span><span data-sid="p3s4">実はこれ、数年前の僕そのものなんですよ。</span><span data-sid="p3s5">毎日20時まで残業して、上司にはこんなのもできないのかと言われて、ストレスで持病が悪化して入院までしました。</span></p>
+        <p><span data-sid="p3s6">ExcelもITも、正直苦手だったんですね。</span><span data-sid="p3s7">そんな僕がなんで変われたのか、この本で全部お話しします。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">3</div>
+  </section>
+
+  <!-- P4 この本で伝えたいこと -->
+  <section class="page" data-page="P4">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PROLOGUE</span></div>
+    <div class="chapband"><span class="no">02</span><h2>この本で伝えたいこと</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p4.jpg" alt="この本で伝えたいこと 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p4s0">先に、この本で一番伝えたいことを言っておきますね。</span><span data-sid="p4s1">それは、立ち位置を変える、ということです。</span><span data-sid="p4s2">作業をこなす人から、仕事を仕組みにする人になる、っていうことですね。</span></p>
+        <p><span data-sid="p4s3">僕はこれ一つで、年間600時間ぐらいの時間が戻ってきて、そこから人生が変わっていったんですね。</span><span data-sid="p4s4">で、その立ち位置を、一番安く、一番確実に変えられる道具が、Power Automateなんですよ。</span><span data-sid="p4s5">追加費用はゼロ。</span></p>
+        <p><span data-sid="p4s6">プログラミングも要りません。</span><span data-sid="p4s7">日本語で、何が起きたら、何をする、と書けるだけでいいんです。</span><span data-sid="p4s8">これ、めちゃくちゃ大事なので覚えておいてください。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">4</div>
+  </section>
+
+  <!-- P5 この本の地図 -->
+  <section class="page" data-page="P5">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PROLOGUE</span></div>
+    <div class="chapband"><span class="no">03</span><h2>この本の地図</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p5.jpg" alt="この本の地図 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p5s0">で、この本の全体像をお伝えしておきますね。</span><span data-sid="p5s1">僕がたどり着いた、メンタ流の5つのステップがあります。</span><span data-sid="p5s2">出す、捨てる、整える、つなぐ、任せて回す。</span></p>
+        <p><span data-sid="p5s3">この5つです。</span><span data-sid="p5s4">Power Automateっていうのは、4番目のつなぐの主役なんですよ。</span><span data-sid="p5s5">なので前半では、Power Automateの正体と、作る前にやっておくこと、つまり出す、捨てる、整える、を見ていきます。</span></p>
+        <p><span data-sid="p5s6">真ん中で実際の画面と一緒に最初の1本を作って、後半で、AIを載せて任せて回すところまでいきます。</span><span data-sid="p5s7">読み終わる頃には、明日の朝の仕事が、ちょっと違って見えてくるんじゃないかなと思います。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">5</div>
+  </section>
+
+  <!-- P6 Power Automateって何？ -->
+  <section class="page" data-page="P6">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">04</span><h2>Power Automateって何？</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p6.jpg" alt="Power Automateって何？ 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p6s0">じゃあ、Power Automateって何なのかという話なんですけれども。</span><span data-sid="p6s1">一言でいうと、繰り返しの作業を、皆さんの代わりにパソコンの中でやってくれる、部下みたいな存在ですね。</span><span data-sid="p6s2">仕組みは本当にシンプルで、何かが起きたら、何かをする。</span></p>
+        <p><span data-sid="p6s3">この二つだけなんですよ。</span><span data-sid="p6s4">この、何かが起きたら、をトリガーと言って、何かをする、をアクションと言います。</span><span data-sid="p6s5">例えば、メールが届いたら、添付をOneDriveに保存する。</span></p>
+        <p><span data-sid="p6s6">Formsに回答が来たら、Teamsに通知する。</span><span data-sid="p6s7">こういうルールを一度作っておくと、あとは皆さんが寝ている間も、勝手に動き続けてくれるわけです。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">6</div>
+  </section>
+
+  <!-- P7 エンジニアが作るやつでしょ -->
+  <section class="page" data-page="P7">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">05</span><h2>エンジニアが作るやつでしょ</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p7.jpg" alt="エンジニアが作るやつでしょ 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p7s0">で、研修でこの話をすると、だいたいここで止まるんですよ。</span><span data-sid="p7s1">Power Automateはエンジニアが作るやつでしょ、と。</span><span data-sid="p7s2">これ、もう入口が別物になってます。</span></p>
+        <p><span data-sid="p7s3">どういうことかというと、以前はまっさらな画面に部品を一個ずつ置いていく作り方だったんですね。</span><span data-sid="p7s4">でも今は、ホーム画面にCopilotの入力欄があって、そこに日本語でやりたいことを書くだけなんですよ。</span><span data-sid="p7s5">僕の感覚だと、フローの8割ぐらいはCopilotが組み立ててくれるんですね。</span></p>
+        <p><span data-sid="p7s6">人間がやるのは、日本語で書くところと、出てきたものが合ってるか確かめるところだけです。</span><span data-sid="p7s7">業務を一番わかっているのは、IT部門じゃなくて現場の皆さんなので、皆さんが作るのが一番早いんですよ。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">7</div>
+  </section>
+
+  <!-- P8 なぜ今なのか -->
+  <section class="page" data-page="P8">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">06</span><h2>なぜ今なのか</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p8.jpg" alt="なぜ今なのか 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p8s0">で、なんで今この話をするのかというと、マイクロソフトの調査で、面白い数字が出ているんですよ。</span><span data-sid="p8s1">働いている人は勤務時間中、2分に1回、1日で275回も、会議やメールやチャットに中断されているそうです。</span><span data-sid="p8s2">メールは1日117通。</span></p>
+        <p><span data-sid="p8s3">もう、集中する時間なんてないわけですよ。</span><span data-sid="p8s4">で、僕がずっと思っているのは、幸福度って結局、時間の自由が大前提だということなんですね。</span><span data-sid="p8s5">どれだけ稼いでも、残業まみれで自分と向き合う時間がなければ、人生がどこに向かっているかわからなくなるんですね。</span></p>
+        <p><span data-sid="p8s6">だから、まずは時間を取り戻すのが先なんですよ。</span><span data-sid="p8s7">そのための道具の話だと思って聴いてください。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">8</div>
+  </section>
+
+  <!-- P9 フローは3種類 -->
+  <section class="page" data-page="P9">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">07</span><h2>フローは3種類</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p9.jpg" alt="フローは3種類 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p9s0">それでは、中身の話に入っていきましょう。</span><span data-sid="p9s1">Power Automateのフローには、大きく3種類あります。</span><span data-sid="p9s2">1つ目が、クラウドフロー。</span></p>
+        <p><span data-sid="p9s3">OutlookとかTeams、SharePointみたいなネット上のサービス同士をつなぐタイプで、パソコンの電源が切れていても動きます。</span><span data-sid="p9s4">2つ目が、デスクトップフロー。</span><span data-sid="p9s5">自分のパソコンの画面操作を再現するタイプで、いわゆるRPAですね。</span></p>
+        <p><span data-sid="p9s6">で、3つ目が、生成アクションという、AIに手順を選ばせる新しいタイプで、こちらはまだプレビュー、つまりお試し段階です。</span><span data-sid="p9s7">使い分けは、処理の中にパソコンの画面操作が要るかどうか、ですね。</span><span data-sid="p9s8">要らないならクラウドフロー、要るならデスクトップフロー。</span></p>
+        <p><span data-sid="p9s9">この本では、クラウドフローを中心にやっていきます。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">9</div>
+  </section>
+
+  <!-- P10 クラウドフローの3つの動き方 -->
+  <section class="page" data-page="P10">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">08</span><h2>クラウドフローの3つの動き方</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p10.jpg" alt="クラウドフローの3つの動き方 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p10s0">で、クラウドフローには、動き出し方が3つあります。</span><span data-sid="p10s1">何かが起きた瞬間に動く自動化フロー。</span><span data-sid="p10s2">ボタンを押して動かすインスタントフロー。</span></p>
+        <p><span data-sid="p10s3">決まった時間に動くスケジュールフロー。</span><span data-sid="p10s4">ここで一つ、めちゃくちゃ大事なことを言っておきます。</span><span data-sid="p10s5">Power Automateは、トリガーが9割です。</span></p>
+        <p><span data-sid="p10s6">よくある失敗が、ボタン型で作っちゃって、結局毎朝自分でボタンを押しているパターンなんですよ。</span><span data-sid="p10s7">それ、自動化じゃなくて半自動化なんですね。</span><span data-sid="p10s8">何かが起きた瞬間に勝手に動く。</span></p>
+        <p><span data-sid="p10s9">ここまで作って初めて、皆さんの手から作業が離れます。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">10</div>
+  </section>
+
+  <!-- P11 皆さんの会社はもう使える -->
+  <section class="page" data-page="P11">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">09</span><h2>皆さんの会社はもう使える</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p11.jpg" alt="皆さんの会社はもう使える 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p11s0">で、ここからが本題なんですけれども。</span><span data-sid="p11s1">皆さんの会社がMicrosoft 365のビジネスプラン、Basic、Standard、Premiumのどれかを契約していたら、Power Automateはもう使えるんですよ。</span><span data-sid="p11s2">追加費用はゼロです。</span></p>
+        <p><span data-sid="p11s3">E3とかE5、大企業向けのプランでも同じですね。</span><span data-sid="p11s4">会社でExcelやTeamsを使っている人なら、ほぼ間違いなく対象です。</span><span data-sid="p11s5">しかも、会社が公式に契約しているツールなので、情シスに止められる心配もないんですね。</span></p>
+        <p><span data-sid="p11s6">ネットで話題の新しいAIツールを探す前に、まず今払っている分を使い倒す。</span><span data-sid="p11s7">これが一番の近道かなと思います。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">11</div>
+  </section>
+
+  <!-- P12 標準コネクタとプレミアムの線引き -->
+  <section class="page" data-page="P12">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">10</span><h2>標準コネクタとプレミアムの線引き</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p12.jpg" alt="標準コネクタとプレミアムの線引き 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p12s0">とはいえ、何でも無料というわけではなくて、ここに一本、線があります。</span><span data-sid="p12s1">Power Automateがつなぐ相手のことをコネクタと言うんですけれども、これに標準とプレミアムの2種類があるんですね。</span><span data-sid="p12s2">Outlook、Teams、SharePoint、OneDrive、Forms、Excel、こういう普段のオフィス系は全部標準で、追加費用なしで使えます。</span></p>
+        <p><span data-sid="p12s3">プレミアムは、SQLとかSalesforceみたいな、大がかりな専門システムをつなぐときのものですね。</span><span data-sid="p12s4">で、ここが注意点なんですけど、プレミアムのコネクタを1個でも混ぜると、そのフロー全体に有料のライセンスが要るようになります。</span><span data-sid="p12s5">まずは標準の範囲で始める。</span></p>
+        <p><span data-sid="p12s6">これで十分すぎるぐらいできます。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">12</div>
+  </section>
+
+  <!-- P13 Microsoftだけじゃない -->
+  <section class="page" data-page="P13">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">11</span><h2>Microsoftだけじゃない</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p13.jpg" alt="Microsoftだけじゃない 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p13s0">で、よくある誤解がもう一つあって、Power AutomateってMicrosoftのアプリ同士をつなぐだけでしょ、というやつですね。</span><span data-sid="p13s1">これ、違います。</span><span data-sid="p13s2">コネクタは1,000種類以上あって、Gmailとか、Googleのカレンダーやスプレッドシート、Slack、Dropboxなんかとも普通につながるんですよ。</span></p>
+        <p><span data-sid="p13s3">しかもこのあたりは標準コネクタです。</span><span data-sid="p13s4">なので、うちはGoogleとMicrosoftを両方使っているから自動化は無理、と思っている会社ほど、実は自動化の余地がめちゃくちゃあるんですね。</span><span data-sid="p13s5">ツールを無理に統一しなくても、間をつなぐ自動化で回ることが結構あります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">13</div>
+  </section>
+
+  <!-- P14 AIとPower Automateの使い分け -->
+  <section class="page" data-page="P14">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 1</span></div>
+    <div class="chapband"><span class="no">12</span><h2>AIとPower Automateの使い分け</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p14.jpg" alt="AIとPower Automateの使い分け 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p14s0">ここで、僕が一番大事にしている考え方をお伝えしますね。</span><span data-sid="p14s1">AIとPower Automate、どっちを使うのか。</span><span data-sid="p14s2">判定は一つの質問で決まります。</span></p>
+        <p><span data-sid="p14s3">その作業、ルールで100パーセント書き切れるか。</span><span data-sid="p14s4">書き切れるなら、Power Automate。</span><span data-sid="p14s5">書き切れない、つまり判断とか文章とか例外があるなら、AI。</span></p>
+        <p><span data-sid="p14s6">これだけです。</span><span data-sid="p14s7">どういうことかというと、AIは賢いけど気まぐれで、毎回ちょっと答えが変わるんですよ。</span><span data-sid="p14s8">Power Automateは融通がきかないけど、決めた手順を毎回確実に繰り返してくれるんですね。</span></p>
+        <p><span data-sid="p14s9">だから、毎朝同じフォルダの同じ数字を拾う作業をAIに頼むのは、枝を1本切るのにチェーンソーを持ち出すようなものなんですよ。</span><span data-sid="p14s10">ハサミで十分です。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">14</div>
+  </section>
+
+  <!-- P15 順番を間違えないでください -->
+  <section class="page" data-page="P15">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 2</span></div>
+    <div class="chapband"><span class="no">13</span><h2>順番を間違えないでください</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p15.jpg" alt="順番を間違えないでください 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p15s0">それでは第2部、作る前にやることですね。</span><span data-sid="p15s1">実は自動化で一番やりがちな失敗が、目の前の面倒な作業を、そのまま自動化しようとすることなんですよ。</span><span data-sid="p15s2">僕も昔はそうでした。</span></p>
+        <p><span data-sid="p15s3">でもこれ、散らかった部屋にルンバを走らせるようなものなんですね。</span><span data-sid="p15s4">業務改善には順番があって、やめる、減らす、変える、速くする。</span><span data-sid="p15s5">この順番です。</span></p>
+        <p><span data-sid="p15s6">ほとんどの人が、いきなり速くする、から始めちゃう。</span><span data-sid="p15s7">ムダを自動化しても、ムダが速く回るだけなんですよ。</span><span data-sid="p15s8">なので、Power Automateを開く前に、3つだけやっておいてほしいことがあります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">15</div>
+  </section>
+
+  <!-- P16 ステップ1・出す -->
+  <section class="page" data-page="P16">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 2</span></div>
+    <div class="chapband"><span class="no">14</span><h2>ステップ1・出す</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p16.jpg" alt="ステップ1・出す 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p16s0">1つ目、出す。</span><span data-sid="p16s1">自分の1週間の仕事を、全部書き出してください。</span><span data-sid="p16s2">頭の中にある、なんとなくやっている作業を、ほかの人に説明できるレベルまで書く。</span></p>
+        <p><span data-sid="p16s3">で、ここがメンタ流なんですけど、書き出したら、嫌いな仕事と、時間が溶ける仕事に印をつけてください。</span><span data-sid="p16s4">感情が、自動化の優先順位を教えてくれるんですよ。</span><span data-sid="p16s5">Power Automateをうまく使っている人って、知識が豊富なわけじゃないんです。</span></p>
+        <p><span data-sid="p16s6">毎朝9時に共有フォルダにCSVが届いて、それを別のExcelに転記して、上司にメールしてます、と言えるかどうか、なんですね。</span><span data-sid="p16s7">この言語化ができている人が、結果的に一番うまく使えています。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">16</div>
+  </section>
+
+  <!-- P17 ステップ2・捨てる -->
+  <section class="page" data-page="P17">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 2</span></div>
+    <div class="chapband"><span class="no">15</span><h2>ステップ2・捨てる</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p17.jpg" alt="ステップ2・捨てる 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p17s0">2つ目、捨てる。</span><span data-sid="p17s1">自動化する前に、そもそもこの作業、要る、と一回疑ってほしいんですね。</span><span data-sid="p17s2">どんなに頑張って自動化しても、その作業にかかる時間はゼロにはなりません。</span></p>
+        <p><span data-sid="p17s3">でも、作業そのものをやめれば、完全にゼロです。</span><span data-sid="p17s4">ツールもAIも要りません。</span><span data-sid="p17s5">僕も昔、Excelの関数を速くすることばかり考えていた時期があって、ある時、このレポート誰が見てるんだろうと周りに聞いてみたら、誰も見てなかったんですよ。</span></p>
+        <p><span data-sid="p17s6">作業時間をゼロにする最強のやり方は、やめる、です。</span><span data-sid="p17s7">上司に一言相談してみてください。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">17</div>
+  </section>
+
+  <!-- P18 ステップ3・整える -->
+  <section class="page" data-page="P18">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 2</span></div>
+    <div class="chapband"><span class="no">16</span><h2>ステップ3・整える</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p18.jpg" alt="ステップ3・整える 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p18s0">3つ目、整える。</span><span data-sid="p18s1">ここが一番の肝です。</span><span data-sid="p18s2">僕がいつも言っていることなんですけど、データベースを整えるのが先なんですよ。</span></p>
+        <p><span data-sid="p18s3">自動化がうまくいかない人は、ほぼ例外なくここでつまずいています。</span><span data-sid="p18s4">セルが結合されている、1つのセルに住所と名前が入っている、日付の書き方が人によってバラバラ。</span><span data-sid="p18s5">こういう一覧表は、人間には読めても、機械には暗号なんですね。</span></p>
+        <p><span data-sid="p18s6">やることは、1セル1データ、見出しは1行だけ、1件を1行に。</span><span data-sid="p18s7">で、Excelなら、データのどこかをクリックしてコントロールとTを押して、テーブルにしてください。</span><span data-sid="p18s8">名前は、Tの後に中身がわかる言葉を足して、例えばT申込データ、みたいにつけておいてください。</span></p>
+        <p><span data-sid="p18s9">これだけで、この先のPower Automateがスッと通ります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">18</div>
+  </section>
+
+  <!-- P19 自分でやった方が早い、の正体 -->
+  <section class="page" data-page="P19">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 2</span></div>
+    <div class="chapband"><span class="no">17</span><h2>自分でやった方が早い、の正体</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p19.jpg" alt="自分でやった方が早い、の正体 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p19s0">で、ここまで聞いて、自分でやった方が早い、と思った方もいると思うんですけれども。</span><span data-sid="p19s1">これ、能力の問題じゃないんですよ。</span><span data-sid="p19s2">作業を言葉にするのが億劫、というだけなんですね。</span></p>
+        <p><span data-sid="p19s3">頭と手が勝手に動く作業ほど、いざ手順を聞かれると説明できないんですよ。</span><span data-sid="p19s4">だから説明するぐらいなら自分でやる、になっちゃうんですね。</span><span data-sid="p19s5">でも逆に言うと、一度言葉にしてしまえば、AIに任せるのも、Power Automateに落とすのも、人に引き継ぐのも、全部同じ入口を通るんですよ。</span></p>
+        <p><span data-sid="p19s6">コツは一つ。</span><span data-sid="p19s7">何が起きたら、何をする、の一文にすること。</span><span data-sid="p19s8">例えば、添付付きのメールが届いたら、OneDriveの請求書フォルダーに保存する。</span></p>
+        <p><span data-sid="p19s9">これが書けたら、もう任せる側のスタートラインに立ってますね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">19</div>
+  </section>
+
+  <!-- P20 開き方と画面の見方 -->
+  <section class="page" data-page="P20">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">18</span><h2>開き方と画面の見方</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s1.png" alt="開き方と画面の見方"></div>
+          <div class="figcap">▲ Power Automateのホーム画面。「最初から作成する」「テンプレートから作成する」「Copilot で作成する」の3つの入口</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p20s0">それではですね、実際に画面を見ていきましょう。</span><span data-sid="p20s1">ブラウザで、make.powerautomate.com にアクセスして、会社のアカウントでサインインします。</span><span data-sid="p20s2">こちらがホーム画面ですね。</span><span data-sid="p20s3">真ん中に、最初から作成する、テンプレートから作成する、Copilotで作成する、の3つが並んでいて、左側に作成、テンプレート、マイフロー、と並んでいます。</span><span data-sid="p20s4">マイフローは自分が作ったフローの一覧、テンプレートは、よくある自動化のお手本集ですね。</span><span data-sid="p20s5">最初はこのテンプレートを眺めるだけでも、あ、これ自分の仕事だ、というのが見つかると思います。</span><span data-sid="p20s6">この画面が出たら、準備は完了です。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">20</div>
+  </section>
+
+  <!-- P21 実演1・Copilotに日本語で頼む -->
+  <section class="page" data-page="P21">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">19</span><h2>実演1・Copilotに日本語で頼む</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s2.png" alt="実演1・Copilotに日本語で頼む"></div>
+          <div class="figcap">▲ 「Copilot で作成する」に日本語で書くと「提案されたフロー」が出てくる</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p21s0">じゃあ、最初の1本を作ってみましょう。</span><span data-sid="p21s1">ホーム画面の、Copilotで作成する、を押すと入力欄が出てくるので、こう書きます。</span><span data-sid="p21s2">Outlookに添付ファイル付きのメールが届いたら、添付ファイルをOneDriveの請求書フォルダーに保存して、Teamsの自分あてに通知する。</span><span data-sid="p21s3">で、生成を押します。</span><span data-sid="p21s4">そうすると、こちらのように、提案されたフローが出てくるんですよ。</span><span data-sid="p21s5">きっかけは、新しいメールが届いたとき、ですね。</span><span data-sid="p21s6">そこから添付を取り出して、OneDriveに保存して、Teamsに投稿する。</span><span data-sid="p21s7">添付が複数あっても回るように、繰り返しの処理まで組んでくれています。</span><span data-sid="p21s8">違っていたら、下の欄に日本語で足して出し直せばOKです。</span><span data-sid="p21s9">会話で詰めていく感じですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">21</div>
+  </section>
+
+  <!-- P22 いま何が起きたのか -->
+  <section class="page" data-page="P22">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">20</span><h2>いま何が起きたのか</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p22.jpg" alt="いま何が起きたのか 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p22s0">で、今の画面で何が起きたのか解説しますね。</span><span data-sid="p22s1">さっきの一文を、Copilotがトリガーとアクションに分解してくれました。</span><span data-sid="p22s2">次の画面では、使うアプリの接続を確認します。</span></p>
+        <p><span data-sid="p22s3">緑のチェックがついていれば、もうつながっている状態ですね。</span><span data-sid="p22s4">赤いビックリマークのものだけサインインし直せばOKです。</span><span data-sid="p22s5">で、フローを作成、を押すと、編集画面が開きます。</span></p>
+        <p><span data-sid="p22s6">ここで大事なのが、8割はCopilotの叩き台、残りの2割は自分で確かめる、ということですね。</span><span data-sid="p22s7">今の例なら、Teamsの投稿先が本当に自分あてになっているかを見る。</span><span data-sid="p22s8">ここを飛ばすと、動くけど違うものができあがります。</span></p>
+        <p><span data-sid="p22s9">人に仕事を頼んだ後に、一回目を通すのと同じですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">22</div>
+  </section>
+
+  <!-- P23 実演2・テンプレートから -->
+  <section class="page" data-page="P23">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">21</span><h2>実演2・テンプレートから</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s3.png" alt="実演2・テンプレートから"></div>
+          <div class="figcap">▲ テンプレート「新しい応答が送信されたら、アダプティブ カードを Teams に投稿する」。接続を確認して続行</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p23s0">次は、テンプレートから作ってみましょう。</span><span data-sid="p23s1">テンプレートで、Formsと検索すると、Formsに新しい回答が来たらTeamsに投稿する、というお手本が出てきます。</span><span data-sid="p23s2">これを選んで、接続を確認して続行を押して、あとはどのフォームか、どのチャンネルに投稿するかを選ぶだけです。</span><span data-sid="p23s3">本当にこれだけで動きます。</span><span data-sid="p23s4">こちらの画面では、AI活用勉強会の申込フォームに回答が来たら、営業部のチャンネルに、申込がありました、と投稿するように設定しました。</span><span data-sid="p23s5">難しそうと身構えている人ほど、まずテンプレートから1本動かしてみてください。</span><span data-sid="p23s6">あ、勝手に動いた、というあの感動が、自動化にハマる入口になります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">23</div>
+  </section>
+
+  <!-- P24 実演3・FormsからExcelに1件追加 -->
+  <section class="page" data-page="P24">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">22</span><h2>実演3・FormsからExcelに1件追加</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s4.png" alt="実演3・FormsからExcelに1件追加"></div>
+          <div class="figcap">▲ Excel Online (Business)「表に行を追加」。テーブル「T申込データ」を選ぶと列が並ぶ</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p24s0">で、さっきの申込を、Excelの一覧表にも自動で追加してみましょう。</span><span data-sid="p24s1">アクションで、Excel Online（Business）の、表に行を追加、を選びます。</span><span data-sid="p24s2">ここで、さっきの整えるのステップでテーブルにしておいた意味が出てくるんですよ。</span><span data-sid="p24s3">ファイルを選ぶと、テーブルの一覧が出るんですけど、テーブルにしていないExcelは、ここに何も出てきません。</span><span data-sid="p24s4">こちらの画面では、T申込データというテーブルが出ていますね。</span><span data-sid="p24s5">あとは、名前の列にはFormsの名前、会社名の列にはFormsの会社名、と動的なコンテンツを当てはめるだけ。</span><span data-sid="p24s6">これで、申込が来るたびに、Excelに1件ずつ勝手に増えていきます。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">24</div>
+  </section>
+
+  <!-- P25 実演4・承認フロー -->
+  <section class="page" data-page="P25">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">23</span><h2>実演4・承認フロー</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s5.png" alt="実演4・承認フロー"></div>
+          <div class="figcap">▲ 「開始して承認を待機」。承認の種類・タイトル・担当者（上司）を設定するだけ</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p25s0">次は、承認ですね。</span><span data-sid="p25s1">承認のために席を立って、捕まらない上司を探して、進捗を聞いて回る。</span><span data-sid="p25s2">こういう承認のための仕事って、本来やるべき仕事じゃないんですよ。</span><span data-sid="p25s3">Power Automateには、開始して承認を待機、というアクションがあります。</span><span data-sid="p25s4">こちらの画面では、Formsで申請が来たら、上司のTeamsに承認カードが届いて、上司は承認か却下のボタンを押すだけ。</span><span data-sid="p25s5">結果が申請者に自動で届くように組んであります。</span><span data-sid="p25s6">上司はスマホのTeamsからでもワンタップで済むので、承認待ちで仕事が止まる、がほぼなくなるんですね。</span><span data-sid="p25s7">経費申請、有給申請、稟議、全部この型でいけます。</span><span data-sid="p25s8">しかも承認もTeamsも標準コネクタなので、追加費用はゼロです。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">25</div>
+  </section>
+
+  <!-- P26 実演5・スケジュール -->
+  <section class="page" data-page="P26">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">24</span><h2>実演5・スケジュール</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s6.png" alt="実演5・スケジュール"></div>
+          <div class="figcap">▲ スケジュール済みフロー「毎週月曜の定例会議を招集する」。繰り返し→Teamsに投稿</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p26s0">最後は、決まった時間に動くスケジュールフローです。</span><span data-sid="p26s1">こちらは、毎週月曜の朝に、定例会議の招集をTeamsに自動で投稿するフローですね。</span><span data-sid="p26s2">実はこれ、僕が一番最初に作ったフローなんですよ。</span><span data-sid="p26s3">正直、たった10分の作業を自動化して意味あるのかな、と半信半疑でした。</span><span data-sid="p26s4">でも数ヶ月後に気づいたんです。</span><span data-sid="p26s5">あ、もう何ヶ月もこの作業のこと、考えてすらいないな、って。</span><span data-sid="p26s6">時間が浮いたこと以上に、頭の片隅にあった、送らなきゃ、が消えたのが大きかったんですね。</span><span data-sid="p26s7">で、浮いた朝の10分は、今日一番大事なことは何か、を考える時間に使ってください。</span><span data-sid="p26s8">コピペから始める1日と、優先順位を考えてから始める1日では、質がまるで違います。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">26</div>
+  </section>
+
+  <!-- P27 テストと実行履歴 -->
+  <section class="page" data-page="P27">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">25</span><h2>テストと実行履歴</h2><div class="rule"></div></div>
+    <div class="body2col vstack">
+      <div class="fig">
+        <div>
+          <div class="shotcard"><div class="bar"><i></i><i></i><i></i></div><img src="assets/shots/s7.png" alt="テストと実行履歴"></div>
+          <div class="figcap">▲ テスト実行後の緑チェック（上）と、フロー詳細ページの「28 日間の実行履歴」（下）</div>
+        </div>
+      </div>
+      <div class="txt">
+        <p><span data-sid="p27s0">フローができたら、必ずテストをしましょう。</span><span data-sid="p27s1">右上のテストを押して、手動を選んで、実際にメールを送ったりフォームに回答したりします。</span><span data-sid="p27s2">うまくいくと、各ステップに緑のチェックがつくんですね。</span><span data-sid="p27s3">失敗したところには赤いバツがつきます。</span><span data-sid="p27s4">で、フローの詳細画面には、28日間の実行履歴が残っていて、いつ動いて、どこで止まったかが全部見えます。</span><span data-sid="p27s5">ここがマクロとの大きな違いで、中身が画面上で見えるので、作った本人以外でも追えるんですよ。</span><span data-sid="p27s6">赤いバツが出たら、Copilotに、なぜ失敗したの、と聞いてみてください。</span><span data-sid="p27s7">原因を説明してくれます。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">27</div>
+  </section>
+
+  <!-- P28 動的コンテンツ -->
+  <section class="page" data-page="P28">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 3</span></div>
+    <div class="chapband"><span class="no">26</span><h2>動的コンテンツ</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p28.jpg" alt="動的コンテンツ 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p28s0">で、実演の中で何回か出てきた、動的なコンテンツ、というやつですね。</span><span data-sid="p28s1">これ、難しそうに見えるんですけど、正体はめちゃくちゃ単純で、さっきの結果を、次で使う、というだけなんですよ。</span><span data-sid="p28s2">Formsの回答に入っていた名前を、Excelの名前の列に入れる。</span></p>
+        <p><span data-sid="p28s3">メールに付いていた添付の名前を、保存するファイルの名前にする。</span><span data-sid="p28s4">前のステップが出してくれたものが、部品として並んでいるので、そこから選ぶだけです。</span><span data-sid="p28s5">人に仕事を頼むときの、さっきのあれを使って、と同じですね。</span></p>
+        <p><span data-sid="p28s6">この感覚がつかめると、フロー作りが一気に楽になります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">28</div>
+  </section>
+
+  <!-- P29 勝手に出てくるApply to each -->
+  <section class="page" data-page="P29">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">27</span><h2>勝手に出てくるApply to each</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p29.jpg" alt="勝手に出てくるApply to each 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p29s0">ここからは、つまずきポイントですね。</span><span data-sid="p29s1">まず一番多いのが、Apply to each、日本語だと、それぞれに適用、が勝手に出てくるやつです。</span><span data-sid="p29s2">これ、Power Automateが、前のステップの結果が複数件だと判断すると、自動でループを入れてくれる仕組みなんですよ。</span></p>
+        <p><span data-sid="p29s3">メールの添付が複数あるかもしれないから、1つずつ回しますね、ということですね。</span><span data-sid="p29s4">なので、出てきても壊れたわけじゃないので、ご安心ください。</span><span data-sid="p29s5">1件しか来ないとわかっている場合は、式でfirstという関数を使うと消せますが、最初のうちはそのまま動かしてOKです。</span></p>
+        <p><span data-sid="p29s6">あと、ループの中の値は、ループの外からは使えないので、そこだけ覚えておいてください。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">29</div>
+  </section>
+
+  <!-- P30 Excelの3つの罠 -->
+  <section class="page" data-page="P30">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">28</span><h2>Excelの3つの罠</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p30.jpg" alt="Excelの3つの罠 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p30s0">次に、Excel連携で必ず踏む罠が3つあります。</span><span data-sid="p30s1">1つ目、テーブルにしていないと選択肢に出てこない。</span><span data-sid="p30s2">これは整えるのステップでやりましたね。</span></p>
+        <p><span data-sid="p30s3">2つ目、日付を取り出すと、45017みたいな数字で返ってくることがある。</span><span data-sid="p30s4">これはExcelの内部の日付の形で、アクションの設定で日付の形式を変えれば直せます。</span><span data-sid="p30s5">3つ目、一覧表から件数を読み込むとき、そのままだと256件までしか取れないんですね。</span></p>
+        <p><span data-sid="p30s6">設定でページネーションをオンにすると増やせます。</span><span data-sid="p30s7">この3つを知っているだけで、Excel連携でハマる時間が激減します。</span><span data-sid="p30s8">逆に言うと、ここを知らないと、なんで動かないんだ、で30分溶けるんですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">30</div>
+  </section>
+
+  <!-- P31 知らないと止まる数字 -->
+  <section class="page" data-page="P31">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">29</span><h2>知らないと止まる数字</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p31.jpg" alt="知らないと止まる数字 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p31s0">で、ライセンスの範囲で知っておいてほしい数字が3つあります。</span><span data-sid="p31s1">1つ目、90日間一度も動かなかったフローは、自動でオフになります。</span><span data-sid="p31s2">止まる30日前にメールで知らせてくれますが、年に1回のフローは覚えておいてください。</span></p>
+        <p><span data-sid="p31s3">2つ目、Microsoft 365付属の範囲だと、1日に使えるアクションはひとり6,000回まで。</span><span data-sid="p31s4">普通に使う分には余裕ですが、超えると遅くなります。</span><span data-sid="p31s5">3つ目、時刻の基準が世界標準時なので、日本時間と9時間ズレます。</span></p>
+        <p><span data-sid="p31s6">スケジュールやファイル名に日付を入れるときは、タイムゾーンを大阪、札幌、東京に変えておいてください。</span><span data-sid="p31s7">ここ、結構ハマるポイントです。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">31</div>
+  </section>
+
+  <!-- P32 エラー通知は自分宛てにしない -->
+  <section class="page" data-page="P32">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">30</span><h2>エラー通知は自分宛てにしない</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p32.jpg" alt="エラー通知は自分宛てにしない 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p32s0">で、運用の話を一つ。</span><span data-sid="p32s1">フローが失敗したときの通知を、自分のメールに飛ばしている人、めちゃくちゃ多いんですよ。</span><span data-sid="p32s2">最初はそれでいいんですけど、休みの日にエラーが放置される、異動でフローが止まる、対応のやり方が自分しかわからなくなる。</span></p>
+        <p><span data-sid="p32s3">要するに、フローが個人に紐づいた状態になるんですね。</span><span data-sid="p32s4">通知先は、共有のメールボックスや、Teamsの運用チャンネルにしておいてください。</span><span data-sid="p32s5">フローは、作った人のものじゃなくて、業務のものです。</span></p>
+        <p><span data-sid="p32s6">あの人しかわからないマクロ、という野良ツール問題の答えが、実はここにあるんですよ。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">32</div>
+  </section>
+
+  <!-- P33 まず1本を完璧に -->
+  <section class="page" data-page="P33">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">31</span><h2>まず1本を完璧に</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p33.jpg" alt="まず1本を完璧に 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p33s0">自動化で効率化したいなら、あれもこれも同時に、は絶対にやめた方がいいです。</span><span data-sid="p33s1">僕がおすすめしているのは、1本をまず完璧に組み上げること。</span><span data-sid="p33s2">時間をかけて丁寧にテストして、エラーが出たら対策して、絶対に動く1本に仕上げるんですね。</span></p>
+        <p><span data-sid="p33s3">ここを雑にやると、結局手で直す羽目になって、自動化した意味がなくなるんですよ。</span><span data-sid="p33s4">あと、名前は、マイフロー1じゃなくて、日次売上レポート自動送信、みたいにわかりやすくつけておいてください。</span><span data-sid="p33s5">3ヶ月後の自分が見てもわかるように、ですね。</span></p>
+        <p><span data-sid="p33s6">最初の1本が一番きついですが、そこを越えたら2本目、3本目はどんどん楽になります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">33</div>
+  </section>
+
+  <!-- P34 静かに始める3つの掟 -->
+  <section class="page" data-page="P34">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 4</span></div>
+    <div class="chapband"><span class="no">32</span><h2>静かに始める3つの掟</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p34.jpg" alt="静かに始める3つの掟 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p34s0">で、ここは僕の持論なんですけど、会社に、自動化していいですか、と聞くと、始まる前に終わることが多いんですよ。</span><span data-sid="p34s1">禁止か、様子見か、会議になる。</span><span data-sid="p34s2">なので、自分の裁量の範囲で、静かに1本始めるのが最速です。</span></p>
+        <p><span data-sid="p34s3">ただし、これは雑にこっそりやる話じゃありません。</span><span data-sid="p34s4">3つの掟を守ってください。</span><span data-sid="p34s5">1つ目、手作業の正規の手順は残しておく。</span></p>
+        <p><span data-sid="p34s6">いつでも戻せる状態にする。</span><span data-sid="p34s7">2つ目、データを社外に出さない。</span><span data-sid="p34s8">Power Automateは会社のMicrosoft 365の中で完結するので、就業規則の範囲内でやれることだけでも十分大きいです。</span></p>
+        <p><span data-sid="p34s9">3つ目、出力には自分が責任を持つ。</span><span data-sid="p34s10">必ず自分で検品してから出す。</span><span data-sid="p34s11">危ないのは、影でやることじゃなくて、型がないことなんですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">34</div>
+  </section>
+
+  <!-- P35 営業の自動化 -->
+  <section class="page" data-page="P35">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 5</span></div>
+    <div class="chapband"><span class="no">33</span><h2>営業の自動化</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p35.jpg" alt="営業の自動化 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p35s0">ここからは、職種別ですね。</span><span data-sid="p35s1">まず営業の方。</span><span data-sid="p35s2">ホームページの問い合わせフォームに回答が来たら、即Teamsに通知して、同時に案件一覧のExcelに1件追加する。</span></p>
+        <p><span data-sid="p35s3">これだけで、問い合わせに気づくのが半日遅れた、がなくなります。</span><span data-sid="p35s4">あとは、商談後のお礼メールの下書きを自動で用意したり、見積もりの承認を上司に回したり。</span><span data-sid="p35s5">セールスフォースの調査だと、営業の人は時間の7割が営業以外の事務作業に取られているそうなので、ここが削れると本当に強いです。</span></p>
+        <p><span data-sid="p35s6">自分の半径5メートルの作業から、一つずつ消していってください。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">35</div>
+  </section>
+
+  <!-- P36 経理・事務の自動化 -->
+  <section class="page" data-page="P36">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 5</span></div>
+    <div class="chapband"><span class="no">34</span><h2>経理・事務の自動化</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p36.jpg" alt="経理・事務の自動化 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p36s0">次に、経理や事務の方。</span><span data-sid="p36s1">ここは、Power Automateと一番相性がいい領域ですね。</span><span data-sid="p36s2">請求書のメールが届いたら、添付を取引先ごとのフォルダに自動保存する。</span></p>
+        <p><span data-sid="p36s3">さっき実演したやつです。</span><span data-sid="p36s4">ある会社では、月2,000通の請求書メールの処理が、月30時間から30分になったそうです。</span><span data-sid="p36s5">あとは、月末の催促ですね。</span></p>
+        <p><span data-sid="p36s6">まだの人いますか、を送るのって、送る側もストレスじゃないですか。</span><span data-sid="p36s7">僕はこれを、締め日の3日前に未提出の人だけにTeamsで自動通知、にしたら、催促がゼロになりました。</span><span data-sid="p36s8">システムからの定期通知、という空気になるので、人間関係に角が立たないんですよ。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">36</div>
+  </section>
+
+  <!-- P37 人事・総務の自動化 -->
+  <section class="page" data-page="P37">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 5</span></div>
+    <div class="chapband"><span class="no">35</span><h2>人事・総務の自動化</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p37.jpg" alt="人事・総務の自動化 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p37s0">で、人事や総務の方ですね。</span><span data-sid="p37s1">申請と承認の往復が一番多い部署だと思います。</span><span data-sid="p37s2">有給申請、備品の購入、残業申請、全部同じ型でいけます。</span></p>
+        <p><span data-sid="p37s3">Formsで申請、上司にTeamsで承認依頼、承認されたらSharePointの一覧に記録、本人に自動で通知。</span><span data-sid="p37s4">この4ステップですね。</span><span data-sid="p37s5">しかも承認の履歴はTeamsの承認アプリに残るので、いつ誰が承認したかを後から追える。</span></p>
+        <p><span data-sid="p37s6">紙の稟議を回す文化から抜けると、申請する側も承認する側も、気持ち的にだいぶ楽になるんですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">37</div>
+  </section>
+
+  <!-- P38 管理職の自動化 -->
+  <section class="page" data-page="P38">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 5</span></div>
+    <div class="chapband"><span class="no">36</span><h2>管理職の自動化</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p38.jpg" alt="管理職の自動化 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p38s0">あとは、管理職の方ですね。</span><span data-sid="p38s1">管理職の負担って、実は指示を出すことより、進捗を把握することの方が圧倒的に重いんですよ。</span><span data-sid="p38s2">毎週の実績レポートを、月曜の朝に自動でTeamsに投稿する。</span></p>
+        <p><span data-sid="p38s3">部下からの日報をFormsで集めて、Excelに自動で一覧にする。</span><span data-sid="p38s4">承認はスマホで1タップ。</span><span data-sid="p38s5">ここまで仕組みにすると、あの件どうなってる、が口から出る回数がガクッと減ります。</span></p>
+        <p><span data-sid="p38s6">で、そのぶんの時間と頭を、判断と育成に回せるんですね。</span><span data-sid="p38s7">部下を信頼していないから聞いて回るんじゃなくて、見える仕組みがないから聞くしかなくなってるだけなんですよ。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">38</div>
+  </section>
+
+  <!-- P39 数字で見る効果 -->
+  <section class="page" data-page="P39">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 6</span></div>
+    <div class="chapband"><span class="no">37</span><h2>数字で見る効果</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p39.jpg" alt="数字で見る効果 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p39s0">ここからは、数字の話ですね。</span><span data-sid="p39s1">調査会社のフォレスターが、Power Automateを使っている企業を調べた結果があります。</span><span data-sid="p39s2">投資に対するリターンが248パーセント。</span></p>
+        <p><span data-sid="p39s3">投資の回収は半年かからない。</span><span data-sid="p39s4">反復作業の多い社員では、年間で200時間ぐらいの時間が戻ってきたそうです。</span><span data-sid="p39s5">大企業の試算なので割り引いて見てほしいですが、方向は間違いないですね。</span></p>
+        <p><span data-sid="p39s6">日本でも、人材大手の会社が毎月の業務報告の回収を自動化して、月60時間減ったそうです。</span><span data-sid="p39s7">ある大学では、口座振込の依頼書の処理が、最短でも1週間かかっていたのが、20分から30分になったそうです。</span><span data-sid="p39s8">もう、大きい会社では当たり前になりつつあるんですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">39</div>
+  </section>
+
+  <!-- P40 ステップ5・任せて回す -->
+  <section class="page" data-page="P40">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 6</span></div>
+    <div class="chapband"><span class="no">38</span><h2>ステップ5・任せて回す</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p40.jpg" alt="ステップ5・任せて回す 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p40s0">で、最後のステップ、任せて回すですね。</span><span data-sid="p40s1">ここで初めてAIの出番です。</span><span data-sid="p40s2">どういうことかというと、フローの中に、AIを一つの部品として載せるんですよ。</span></p>
+        <p><span data-sid="p40s3">例えば、請求書のメールを受け取るのは毎回同じ。</span><span data-sid="p40s4">金額と取引先と日付を読み取るところだけ、AIの判断が要る。</span><span data-sid="p40s5">で、一覧に追記して、担当者に通知するのは、また毎回同じ。</span></p>
+        <p><span data-sid="p40s6">8割は精度の高い自動化で、2割だけAIに任せる。</span><span data-sid="p40s7">こうすると、AIが間違えたときの影響も小さくなるんですね。</span><span data-sid="p40s8">Power AutomateにはAI Builderという機能があって、フローの中で使えます。</span></p>
+        <p><span data-sid="p40s9">こちらは有料のPremiumの範囲ですが、使う人は、いつものフォルダにファイルを置くだけ。</span><span data-sid="p40s10">AIを使っているって意識させないんですね。</span><span data-sid="p40s11">この、知らないうちに使ってた、が一番広まります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">40</div>
+  </section>
+
+  <!-- P41 デスクトップフロー -->
+  <section class="page" data-page="P41">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 6</span></div>
+    <div class="chapband"><span class="no">39</span><h2>デスクトップフロー</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p41.jpg" alt="デスクトップフロー 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p41s0">で、クラウドでは触れない、古い社内システムや画面操作は、デスクトップフローの出番です。</span><span data-sid="p41s1">研修で、RPAって大企業が何百万円もかけて入れるやつでしょ、と言われるんですけど、もう違うんですよ。</span><span data-sid="p41s2">Windows 11には、Power Automateというアプリが最初から入っています。</span></p>
+        <p><span data-sid="p41s3">画面下の検索で、Power Automate、と打てば出てきます。</span><span data-sid="p41s4">個人のMicrosoftアカウントでも使えて、自分のパソコンで動かす分には追加料金はかかりません。</span><span data-sid="p41s5">レコーダーで自分の操作を記録すれば、そのまま手順になる。</span></p>
+        <p><span data-sid="p41s6">で、これが大事なんですけど、AIにブラウザ操作を毎回やらせると、遅いし、使った分だけお金がかかる。</span><span data-sid="p41s7">手が覚えているだけの繰り返しはロボットに任せる。</span><span data-sid="p41s8">で、そのロボットをAIの手足として使う、という発想ですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">41</div>
+  </section>
+
+  <!-- P42 AIエージェント時代 -->
+  <section class="page" data-page="P42">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 6</span></div>
+    <div class="chapband"><span class="no">40</span><h2>AIエージェント時代</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p42.jpg" alt="AIエージェント時代 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p42s0">で、2026年のいま、自動化はさらに、AIエージェントの方向に進化しています。</span><span data-sid="p42s1">Copilot Studioというツールで、状況を読んで判断しながら動くエージェントが作れて、その手足としてPower Automateのフローを呼び出せるんですね。</span><span data-sid="p42s2">ここでも使い分けは同じです。</span></p>
+        <p><span data-sid="p42s3">決まった手順を確実に回すのはPower Automate。</span><span data-sid="p42s4">状況を読んで判断するのはエージェント。</span><span data-sid="p42s5">実際に両方使い倒して思うのは、AIエージェントだけでも、今までの自動化だけでも、実務ではうまくいかないことが多いということです。</span></p>
+        <p><span data-sid="p42s6">両方組み合わせるのが一番強いんですよ。</span><span data-sid="p42s7">だからこそ、今のうちにフローの基本を押さえておくのが大事なんですね。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">42</div>
+  </section>
+
+  <!-- P43 有料版の話 -->
+  <section class="page" data-page="P43">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>PART 6</span></div>
+    <div class="chapband"><span class="no">41</span><h2>有料版の話</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p43.jpg" alt="有料版の話 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p43s0">じゃあ有料版はいくらなのかというと、Premiumというプランが、税別で月2,000円ちょっとです。</span><span data-sid="p43s1">プレミアムコネクタが使えて、AI Builderも使えるようになります。</span><span data-sid="p43s2">高いなと感じた方に、ちょっと僕の考えをお伝えしますね。</span></p>
+        <p><span data-sid="p43s3">こういう課金って、道具を買うんじゃなくて、時間を買う感覚なんですよ。</span><span data-sid="p43s4">毎日1時間かかっていた作業が消えるなら、月20時間が戻ってくるわけですよ。</span><span data-sid="p43s5">時給に直したら、どう見ても元は取れています。</span></p>
+        <p><span data-sid="p43s6">ただし、順番は大事で、まずは追加費用ゼロの標準の範囲で使い倒す。</span><span data-sid="p43s7">物足りなくなったら、時間を買う投資として検討する。</span><span data-sid="p43s8">この順番でOKです。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">43</div>
+  </section>
+
+  <!-- P44 複利時短術 -->
+  <section class="page" data-page="P44">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>EPILOGUE</span></div>
+    <div class="chapband"><span class="no">42</span><h2>複利時短術</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p44.jpg" alt="複利時短術 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p44s0">最後にですね、僕がずっと言っている考え方を一つ。</span><span data-sid="p44s1">複利時短術です。</span><span data-sid="p44s2">自動化で浮いた時間を、もっと働く、に使ったら、残業が減るだけで終わっちゃうんですよ。</span></p>
+        <p><span data-sid="p44s3">そうじゃなくて、浮いた時間の半分を、次の1本を作る時間に充ててください。</span><span data-sid="p44s4">そうすると、時短が時短を生むんですね。</span><span data-sid="p44s5">お金の複利と同じで、最初は小さな効果でも、積み重なると信じられないぐらい時間が生まれます。</span></p>
+        <p><span data-sid="p44s6">僕の年間600時間も、最初はコピペ削減のたった数分から始まりました。</span><span data-sid="p44s7">今日、AIやPower Automateに、自動化を1本作らせてみてください。</span><span data-sid="p44s8">それだけで、半年後の景色が変わります。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">44</div>
+  </section>
+
+  <!-- P45 三段階の未来 -->
+  <section class="page" data-page="P45">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>EPILOGUE</span></div>
+    <div class="chapband"><span class="no">43</span><h2>三段階の未来</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p45.jpg" alt="三段階の未来 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p45s0">で、その先に何があるかというと、三段階の未来だと僕は思っています。</span><span data-sid="p45s1">第1段階は、影の期間ですね。</span><span data-sid="p45s2">自分の業務だけを静かに自動化して、時間と実力を積んでいく。</span></p>
+        <p><span data-sid="p45s3">第2段階は、頼られる期間。</span><span data-sid="p45s4">成果は隠しきれなくなって、あの人に聞け、と言われる存在になっていくんですね。</span><span data-sid="p45s5">で、第3段階が、設計する期間。</span></p>
+        <p><span data-sid="p45s6">部署全体の業務の流れを見て、効率化を設計する側に回る、と。</span><span data-sid="p45s7">会社に隠れて1本目を作った人が、最後は部署を救う側になるんですよ。</span><span data-sid="p45s8">最強の個人を育てることが、結果として組織の自動化につながるんですね。</span></p>
+        <p><span data-sid="p45s9">僕は本気でそう思っています。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">45</div>
+  </section>
+
+  <!-- P46 明日からの7日間プラン -->
+  <section class="page" data-page="P46">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>EPILOGUE</span></div>
+    <div class="chapband"><span class="no">44</span><h2>明日からの7日間プラン</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p46.jpg" alt="明日からの7日間プラン 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p46s0">で、明日からの最初の一週間、これだけやってみてください。</span><span data-sid="p46s1">1日目、1週間の仕事を全部書き出す。</span><span data-sid="p46s2">2日目、その中から1つ、やめていい作業を見つける。</span></p>
+        <p><span data-sid="p46s3">3日目、一番よく使うExcelをコントロールとTでテーブルにする。</span><span data-sid="p46s4">4日目、Power Automateのホーム画面を開いて、Copilotに日本語で1本頼む。</span><span data-sid="p46s5">5日目、テストして、実行履歴の緑のチェックを見る。</span></p>
+        <p><span data-sid="p46s6">6日目、エラー通知の宛先を共有先に変える。</span><span data-sid="p46s7">で、7日目、浮いた時間で何をするか考える。</span><span data-sid="p46s8">ここまでできたら、皆さんはもう、社内で一番自動化が進んでる人ですよ。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">46</div>
+  </section>
+
+  <!-- P47 おわりに -->
+  <section class="page" data-page="P47">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>EPILOGUE</span></div>
+    <div class="chapband"><span class="no">45</span><h2>おわりに</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p47.jpg" alt="おわりに 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p47s0">はいということで、Power Automate入門、完全版、以上になります。</span><span data-sid="p47s1">ここまで聴いてくださって、ありがとうございました。</span><span data-sid="p47s2">最後に一つだけ。</span></p>
+        <p><span data-sid="p47s3">明日、目の前の作業をやる前に、自分に問いかけてみてください。</span><span data-sid="p47s4">これ、自分がやる必要ある？</span><span data-sid="p47s5">その小さな問いが、作業する側から任せる側への、最初の一歩です。</span></p>
+        <p><span data-sid="p47s6">で、フローの作り方で困ったら、僕が作ったPower Automateフロー作成のGPTsもプレゼントしていますので、そちらに相談してみてください。</span><span data-sid="p47s7">僕のYouTubeチャンネル、メンタエクセルでは、ExcelやAIで最強の個人になるための情報を発信しています。</span><span data-sid="p47s8">それでは、一緒にスキルアップしていきましょう。</span></p>
+        <p><span data-sid="p47s9">お疲れ様でした。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">47</div>
+  </section>
+
+  <!-- P48 出典・参考資料 -->
+  <section class="page" data-page="P48">
+    <div class="running"><span class="brand"><b>TAKUYA式</b>　TAKUYA式 Power Automate入門</span><span>EPILOGUE</span></div>
+    <div class="chapband"><span class="no">46</span><h2>出典・参考資料</h2><div class="rule"></div></div>
+    <div class="body2col">
+      <div class="fig">
+        <img class="figimg" src="assets/figs/fig_p48.jpg" alt="出典・参考資料 図解">
+      </div>
+      <div class="txt">
+        <p><span data-sid="p48s0">この本の数字と仕様は、こちらの資料をもとにしています。</span><span data-sid="p48s1">Microsoft Learn、Power Automateの製品ドキュメントとライセンスガイド。</span><span data-sid="p48s2">Microsoft Work Trend Index、2025年の特別レポート。</span></p>
+        <p><span data-sid="p48s3">Forrester、Total Economic Impact of Microsoft Power Automate、2024年。</span><span data-sid="p48s4">Salesforce、State of Sales。</span><span data-sid="p48s5">日本企業の事例は、各社の公開資料をもとにしています。</span></p>
+        <p><span data-sid="p48s6">価格や上限は、2026年9月時点のものです。</span></p>
+      </div>
+    </div>
+    <div class="pagefoot">48</div>
+  </section>
+
+</template>
+
+<div id="lightbox"><img alt="拡大表示"></div>
+
+<script src="assets/audio/manifest.js"></script>
+<script>
+(() => {
+  const MANIFEST = window.MANIFEST || [];
+  const book = document.getElementById('book');
+  const tpl = document.getElementById('tpl-pages');
+  book.appendChild(tpl.content.cloneNode(true));
+
+  const pages = [...book.querySelectorAll('.page')];
+  const ctrl = document.getElementById('ctrl');
+  const playBtn = document.getElementById('playBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const autoTgl = document.getElementById('autoTgl');
+  const pageInd = document.getElementById('pageInd');
+  const speedSel = document.getElementById('speedSel');
+
+  // ページごとの文リスト
+  const byPage = {};
+  MANIFEST.forEach(m => { (byPage[m.page] = byPage[m.page] || []).push(m); });
+
+  let cur = 0;            // 現在ページindex
+  let playing = false;    // 再生中フラグ
+  let autoTurn = true;
+  let speed = 1;
+  let audio = new Audio();
+  let seq = 0;            // 再生セッション識別（中断制御）
+
+  function showPage(i, instant) {
+    pages.forEach((p, k) => {
+      p.classList.remove('leaving');
+      if (k === i) { p.classList.add('current'); }
+      else {
+        if (p.classList.contains('current') && !instant && k < i) {
+          p.classList.remove('current'); p.classList.add('leaving');
+          setTimeout(() => p.classList.remove('leaving'), 700);
+        } else { p.classList.remove('current'); }
+      }
+    });
+    cur = i;
+    pageInd.textContent = (i + 1) + ' / ' + pages.length;
+    // ページ切替のたびに横方向のズレを強制リセット（iOS対策）
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+    const bc = pages[i].querySelector('.body2col');
+    if (bc) bc.scrollTop = 0;
+    const tx = pages[i].querySelector('.txt');
+    if (tx) tx.scrollTop = 0;
+  }
+
+  function clearHl(scope) {
+    (scope || document).querySelectorAll('span[data-sid].active')
+      .forEach(s => s.classList.remove('active'));
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function playPage(i, fromSentence = 0) {
+    const mySeq = ++seq;
+    const pageEl = pages[i];
+    const pid = pageEl.dataset.page;
+    const list = byPage[pid] || [];
+    playing = true; playBtn.textContent = '❚❚';
+
+    for (let s = fromSentence; s < list.length; s++) {
+      if (mySeq !== seq) return;
+      const item = list[s];
+      const span = pageEl.querySelector('span[data-sid="' + item.id + '"]');
+      clearHl(pageEl);
+      if (span) {
+        span.classList.add('active');
+        // 画面全体は動かさず、文字フレーム（.txt）の中だけで
+        // 「はみ出したときだけ最小限」追従させる（画像は固定のまま）
+        const scroller = [span.closest('.txt'), span.closest('.body2col')]
+          .find(el => el && el.scrollHeight > el.clientHeight + 4);
+        if (scroller) {
+          const cR = scroller.getBoundingClientRect();
+          const sR = span.getBoundingClientRect();
+          if (sR.bottom > cR.bottom - 6) {
+            scroller.scrollTo({ top: scroller.scrollTop + (sR.bottom - cR.bottom) + 28, behavior: 'smooth' });
+          } else if (sR.top < cR.top + 6) {
+            scroller.scrollTo({ top: Math.max(0, scroller.scrollTop - (cR.top - sR.top) - 28), behavior: 'smooth' });
+          }
+        }
+      }
+      try {
+        await new Promise((res, rej) => {
+          audio.src = 'assets/audio/' + item.file;
+          audio.defaultPlaybackRate = speed;
+          audio.playbackRate = speed;
+          audio.onended = res;
+          audio.onerror = res;           // 音声欠落時は読み飛ばす
+          audio.play().then(() => { audio.playbackRate = speed; }).catch(res);
+          const guard = setInterval(() => { if (mySeq !== seq) { clearInterval(guard); res(); } }, 200);
+          audio.onended = () => { clearInterval(guard); res(); };
+        });
+      } catch (e) { /* skip */ }
+      if (mySeq !== seq) return;
+      await sleep(260);
+      if (mySeq !== seq) return;
+    }
+
+    clearHl(pageEl);
+    if (mySeq !== seq) return;
+    if (autoTurn && i < pages.length - 1) {
+      await sleep(650);
+      if (mySeq !== seq) return;
+      showPage(i + 1);
+      playPage(i + 1);
+    } else {
+      playing = false; playBtn.textContent = '▶';
+    }
+  }
+
+  function stopAudio() {
+    seq++;
+    audio.pause();
+    playing = false; playBtn.textContent = '▶';
+    clearHl();
+  }
+
+  function goto(i) {
+    if (i < 0 || i >= pages.length) return;
+    const wasPlaying = playing;
+    stopAudio();
+    showPage(i);
+    if (wasPlaying) playPage(i);
+  }
+
+  playBtn.addEventListener('click', () => {
+    if (playing) { stopAudio(); }
+    else { playPage(cur); }
+  });
+  prevBtn.addEventListener('click', () => { prevBtn.blur(); goto(cur - 1); });
+  nextBtn.addEventListener('click', () => { nextBtn.blur(); goto(cur + 1); });
+  autoTgl.addEventListener('click', () => {
+    autoTgl.blur();
+    autoTurn = !autoTurn;
+    autoTgl.classList.toggle('on', autoTurn);
+  });
+  speedSel.addEventListener('change', () => {
+    speed = parseFloat(speedSel.value);
+    audio.defaultPlaybackRate = speed;
+    audio.playbackRate = speed;   // 再生中の文にも即反映
+    speedSel.blur();              // ここにフォーカスが残ると矢印キーが速度切替に食われる
+  });
+  // キーボード操作：← → でページ送り、スペースで再生/停止
+  document.addEventListener('keydown', e => {
+    const tag = e.target && e.target.tagName;
+    if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goto(cur + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goto(cur - 1); }
+    else if (e.key === ' ') { e.preventDefault(); playBtn.blur(); playBtn.click(); }
+    else if (e.key === 'Escape') lightbox.classList.remove('show');
+  });
+
+  // クリックで拡大
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = lightbox.querySelector('img');
+  document.querySelectorAll('.shotcard img, .figimg').forEach(img => {
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      lightboxImg.src = img.src;
+      lightbox.classList.add('show');
+    });
+  });
+  lightbox.addEventListener('click', () => lightbox.classList.remove('show'));
+  document.querySelectorAll('.figcap').forEach(c => { c.textContent += '（クリックで拡大）'; });
+
+  const startBtn = document.getElementById('startBtn');
+  startBtn.addEventListener('click', () => {
+    ctrl.style.visibility = 'visible';
+    playPage(0);
+  });
+
+  showPage(0, true);
+})();
+</script>
+</body>
+</html>
