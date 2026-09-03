@@ -218,6 +218,7 @@
     transition: background .15s;
   }
   #ctrl button:hover { background: rgba(255,255,255,.24); }
+  #ctrl button.nav { width: auto; padding: 0 14px; border-radius: 999px; font-size: 13px; white-space: nowrap; letter-spacing: .04em; }
   #ctrl button.primary {
     width: 46px; height: 46px; font-size: 17px;
     background: linear-gradient(120deg, var(--accent1), var(--accent2));
@@ -271,6 +272,7 @@
     }
     #ctrl button { width: 32px; height: 32px; font-size: 12px; }
     #ctrl button.primary { width: 40px; height: 40px; font-size: 15px; }
+    #ctrl button.nav { width: auto; padding: 0 10px; font-size: 12px; }
     #pageInd { min-width: 46px; }
     .toggle { white-space: nowrap; }
     #speedSel { padding: 5px 8px; font-size: 12px; }
@@ -308,9 +310,9 @@
 <div id="book"></div>
 
 <div id="ctrl" style="visibility:hidden">
-  <button id="prevBtn" title="前のページ">◀</button>
+  <button id="prevBtn" class="nav" title="前のページ">‹ 前へ</button>
   <button id="playBtn" class="primary" title="再生 / 一時停止">▶</button>
-  <button id="nextBtn" title="次のページ">▶▶</button>
+  <button id="nextBtn" class="nav" title="次のページ">次へ ›</button>
   <span id="pageInd">1 / 14</span>
   <span class="toggle on" id="autoTgl" title="読み終わったら自動でページをめくる">
     <span class="sw"></span>自動めくり
@@ -318,6 +320,7 @@
   <select id="speedSel" title="読み上げ速度">
     <option value="0.75">0.75x</option>
     <option value="1" selected>1x</option>
+    <option value="1.2">1.2x</option>
     <option value="1.5">1.5x</option>
     <option value="1.8">1.8x</option>
     <option value="2">2x</option>
